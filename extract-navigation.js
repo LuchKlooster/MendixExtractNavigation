@@ -14,271 +14,302 @@ const { MendixPlatformClient } = require("mendixplatformsdk");
 const fs = require("fs");
 
 const CONFIG = {
-    projectId: process.env.MENDIX_PROJECT_ID || "542db4de-9b24-48cf-93d5-1ce757594249",
+    projectId: process.env.MENDIX_PROJECT_ID || "91a6401a-1126-49d5-a295-9ee637b88554",
     branch: process.env.MENDIX_BRANCH || "main",
     outputFile: process.env.OUTPUT_FILE || "navigation-items.csv"
 };
+const glyphiconMapping = {
+    // Speciale tekens (ASCII gebaseerd)
+    42: "glyphicon-asterisk",
+    43: "glyphicon-plus",
+    165: "glyphicon-yen",
+    8364: "glyphicon-euro",
+    8381: "glyphicon-ruble",
+    8722: "glyphicon-minus",
+    9729: "glyphicon-cloud",
+    9978: "glyphicon-tent",
+    9993: "glyphicon-envelope",
+    9999: "glyphicon-pencil",
+    63743: "glyphicon-apple",
 
-// Glyphicon code to name mapping (common ones)
-const GLYPHICON_MAP = {
-    57344: "asterisk",
-    57345: "plus",
-    57346: "euro",
-    57348: "minus",
-    57349: "cloud",
-    57350: "envelope",
-    57351: "pencil",
-    57352: "glass",
-    57353: "music",
-    57354: "search",
-    57355: "heart",
-    57356: "star",
-    57357: "star-empty",
-    57358: "user",
-    57359: "film",
-    57360: "th-large",
-    57361: "th",
-    57362: "th-list",
-    57363: "ok",
-    57364: "remove",
-    57365: "zoom-in",
-    57366: "zoom-out",
-    57367: "off",
-    57368: "signal",
-    57369: "cog",
-    57370: "trash",
-    57371: "home",
-    57372: "file",
-    57373: "time",
-    57374: "road",
-    57375: "download-alt",
-    57376: "download",
-    57377: "upload",
-    57378: "inbox",
-    57379: "play-circle",
-    57380: "repeat",
-    57381: "refresh",
-    57382: "list-alt",
-    57383: "lock",
-    57384: "flag",
-    57385: "headphones",
-    57386: "volume-off",
-    57387: "volume-down",
-    57388: "volume-up",
-    57389: "qrcode",
-    57390: "barcode",
-    57391: "tag",
-    57392: "tags",
-    57393: "book",
-    57394: "bookmark",
-    57395: "print",
-    57396: "camera",
-    57397: "font",
-    57398: "bold",
-    57399: "italic",
-    57400: "text-height",
-    57401: "text-width",
-    57402: "align-left",
-    57403: "align-center",
-    57404: "align-right",
-    57405: "align-justify",
-    57406: "list",
-    57407: "indent-left",
-    57408: "indent-right",
-    57409: "facetime-video",
-    57410: "picture",
-    57411: "map-marker",
-    57412: "adjust",
-    57413: "tint",
-    57414: "edit",
-    57415: "share",
-    57416: "check",
-    57417: "move",
-    57418: "step-backward",
-    57419: "fast-backward",
-    57420: "backward",
-    57421: "play",
-    57422: "pause",
-    57423: "stop",
-    57424: "forward",
-    57425: "fast-forward",
-    57426: "step-forward",
-    57427: "eject",
-    57428: "chevron-left",
-    57429: "chevron-right",
-    57430: "plus-sign",
-    57431: "minus-sign",
-    57432: "remove-sign",
-    57433: "ok-sign",
-    57434: "question-sign",
-    57435: "info-sign",
-    57436: "screenshot",
-    57437: "remove-circle",
-    57438: "ok-circle",
-    57439: "ban-circle",
-    57440: "arrow-left",
-    57441: "arrow-right",
-    57442: "arrow-up",
-    57443: "arrow-down",
-    57444: "share-alt",
-    57445: "resize-full",
-    57446: "resize-small",
-    57447: "exclamation-sign",
-    57448: "gift",
-    57449: "leaf",
-    57450: "fire",
-    57451: "eye-open",
-    57452: "eye-close",
-    57453: "warning-sign",
-    57454: "plane",
-    57455: "calendar",
-    57456: "random",
-    57457: "comment",
-    57458: "magnet",
-    57459: "chevron-up",
-    57460: "chevron-down",
-    57461: "retweet",
-    57462: "shopping-cart",
-    57463: "folder-close",
-    57464: "folder-open",
-    57465: "resize-vertical",
-    57466: "resize-horizontal",
-    57467: "hdd",
-    57468: "bullhorn",
-    57469: "bell",
-    57470: "certificate",
-    57471: "thumbs-up",
-    57472: "thumbs-down",
-    57473: "hand-right",
-    57474: "hand-left",
-    57475: "hand-up",
-    57476: "hand-down",
-    57477: "circle-arrow-right",
-    57478: "circle-arrow-left",
-    57479: "circle-arrow-up",
-    57480: "circle-arrow-down",
-    57481: "globe",
-    57482: "wrench",
-    57483: "tasks",
-    57484: "filter",
-    57485: "briefcase",
-    57486: "fullscreen",
-    57487: "dashboard",
-    57488: "paperclip",
-    57489: "heart-empty",
-    57490: "link",
-    57491: "phone",
-    57492: "pushpin",
-    57493: "usd",
-    57494: "gbp",
-    57495: "sort",
-    57496: "sort-by-alphabet",
-    57497: "sort-by-alphabet-alt",
-    57498: "sort-by-order",
-    57499: "sort-by-order-alt",
-    57500: "sort-by-attributes",
-    57501: "sort-by-attributes-alt",
-    57502: "unchecked",
-    57503: "expand",
-    57504: "collapse-down",
-    57505: "collapse-up",
-    57506: "log-in",
-    57507: "flash",
-    57508: "log-out",
-    57509: "new-window",
-    57510: "record",
-    57511: "save",
-    57512: "open",
-    57513: "saved",
-    57514: "import",
-    57515: "export",
-    57516: "send",
-    57517: "floppy-disk",
-    57518: "floppy-saved",
-    57519: "floppy-remove",
-    57520: "floppy-save",
-    57521: "floppy-open",
-    57522: "credit-card",
-    57523: "transfer",
-    57524: "cutlery",
-    57525: "header",
-    57526: "compressed",
-    57527: "earphone",
-    57528: "phone-alt",
-    57529: "tower",
-    57530: "stats",
-    57531: "sd-video",
-    57532: "hd-video",
-    57533: "subtitles",
-    57534: "sound-stereo",
-    57535: "sound-dolby",
-    57536: "sound-5-1",
-    57537: "sound-6-1",
-    57538: "sound-7-1",
-    57539: "copyright-mark",
-    57540: "registration-mark",
-    57541: "cloud-download",
-    57542: "cloud-upload",
-    57543: "tree-conifer",
-    57544: "tree-deciduous",
-    57545: "cd",
-    57546: "save-file",
-    57547: "open-file",
-    57548: "level-up",
-    57549: "copy",
-    57550: "paste",
-    57551: "alert",
-    57552: "equalizer",
-    57553: "king",
-    57554: "queen",
-    57555: "pawn",
-    57556: "bishop",
-    57557: "knight",
-    57558: "baby-formula",
-    57559: "tent",
-    57560: "blackboard",
-    57561: "bed",
-    57562: "apple",
-    57563: "erase",
-    57564: "hourglass",
-    57565: "lamp",
-    57566: "duplicate",
-    57567: "piggy-bank",
-    57568: "scissors",
-    57569: "bitcoin",
-    57572: "yen",
-    57574: "ruble",
-    57576: "scale",
-    57577: "ice-lolly",
-    57578: "ice-lolly-tasted",
-    57579: "education",
-    57580: "option-horizontal",
-    57581: "option-vertical",
-    57582: "menu-hamburger",
-    57583: "modal-window",
-    57584: "oil",
-    57585: "grain",
-    57586: "sunglasses",
-    57587: "text-size",
-    57588: "text-color",
-    57589: "text-background",
-    57590: "object-align-top",
-    57591: "object-align-bottom",
-    57592: "object-align-horizontal",
-    57593: "object-align-left",
-    57594: "object-align-vertical",
-    57595: "object-align-right",
-    57596: "triangle-right",
-    57597: "triangle-left",
-    57598: "triangle-bottom",
-    57599: "triangle-top",
-    57600: "console",
-    57601: "superscript",
-    57602: "subscript",
-    57603: "menu-left",
-    57604: "menu-right",
-    57605: "menu-down",
-    57606: "menu-up",
+    // glyphicons
+    57345: "glyphicon-glass",
+    57346: "glyphicon-music",
+    57347: "glyphicon-search",
+    57349: "glyphicon-heart",
+    57350: "glyphicon-star",
+    57351: "glyphicon-star-empty",
+    57352: "glyphicon-user",
+    57353: "glyphicon-film",
+    //
+    57360: "glyphicon-th-large",
+    57361: "glyphicon-th",
+    57362: "glyphicon-th-list",
+    57363: "glyphicon-ok",
+    57364: "glyphicon-remove",
+    57365: "glyphicon-zoom-in",
+    57366: "glyphicon-zoom-out",
+    57367: "glyphicon-off",
+    57368: "glyphicon-signal",
+    57369: "glyphicon-cog",
+    //
+    57376: "glyphicon-trash",
+    57377: "glyphicon-home",
+    57378: "glyphicon-file",
+    57379: "glyphicon-time",
+    57380: "glyphicon-road",
+    57381: "glyphicon-download-alt",
+    57382: "glyphicon-download",
+    57383: "glyphicon-upload",
+    57384: "glyphicon-inbox",
+    57385: "glyphicon-play-circle",
+    //
+    57392: "glyphicon-repeat",
+    57393: "glyphicon-refresh",
+    57394: "glyphicon-list-alt",
+    57395: "glyphicon-lock",
+    57396: "glyphicon-flag",
+    57397: "glyphicon-headphones",
+    57398: "glyphicon-volume-off",
+    57399: "glyphicon-volume-down",
+    57400: "glyphicon-volume-up",
+    57401: "glyphicon-qrcode",
+    //
+    57408: "glyphicon-barcode",
+    57409: "glyphicon-tag",
+    57410: "glyphicon-tags",
+    57411: "glyphicon-book",
+    57412: "glyphicon-bookmark",
+    57413: "glyphicon-print",
+    57414: "glyphicon-camera",
+    57415: "glyphicon-font",
+    57416: "glyphicon-bold",
+    57417: "glyphicon-italic",
+    //
+    57424: "glyphicon-text-height",
+    57425: "glyphicon-text-width",
+    57426: "glyphicon-align-left",
+    57427: "glyphicon-align-center",
+    57428: "glyphicon-align-right",
+    57429: "glyphicon-align-justify",
+    57430: "glyphicon-list",
+    57431: "glyphicon-indent-left",
+    57432: "glyphicon-indent-right",
+    57433: "glyphicon-facetime-video",
+    // 
+    57440: "glyphicon-picture",
+    //
+    57442: "glyphicon-map-marker",
+    57443: "glyphicon-adjust",
+    57444: "glyphicon-tint",
+    57445: "glyphicon-edit",
+    57446: "glyphicon-share",
+    57447: "glyphicon-check",
+    57448: "glyphicon-move",
+    57449: "glyphicon-step-backward",
+    //
+    57456: "glyphicon-fast-backward",
+    57457: "glyphicon-backward",
+    57458: "glyphicon-play",
+    57459: "glyphicon-pause",
+    57460: "glyphicon-stop",
+    57461: "glyphicon-forward",
+    57462: "glyphicon-fast-forward",
+    57463: "glyphicon-step-forward",
+    57464: "glyphicon-eject",
+    57465: "glyphicon-chevron-left",
+    //
+    57472: "glyphicon-chevron-right",
+    57473: "glyphicon-plus-sign",
+    57474: "glyphicon-minus-sign",
+    57475: "glyphicon-remove-sign",
+    57476: "glyphicon-ok-sign",
+    57477: "glyphicon-question-sign",
+    57478: "glyphicon-info-sign",
+    57479: "glyphicon-screenshot",
+    57480: "glyphicon-remove-circle",
+    57481: "glyphicon-ok-circle",
+    //
+    57488: "glyphicon-ban-circle",
+    57489: "glyphicon-arrow-left",
+    57490: "glyphicon-arrow-right",
+    57491: "glyphicon-arrow-up",
+    57492: "glyphicon-arrow-down",
+    57493: "glyphicon-share-alt",
+    57494: "glyphicon-resize-full",
+    57495: "glyphicon-resize-small",
+    //
+    57601: "glyphicon-exclamation-sign",
+    57602: "glyphicon-gift",
+    57603: "glyphicon-leaf",
+    57604: "glyphicon-fire",
+    57605: "glyphicon-eye-open",
+    57606: "glyphicon-eye-close",
+    57607: "glyphicon-warning-sign",
+    57608: "glyphicon-plane",
+    57609: "glyphicon-calendar",
+    //
+    57616: "glyphicon-random",
+    57617: "glyphicon-comment",
+    57618: "glyphicon-magnet",
+    57619: "glyphicon-chevron-up",
+    57620: "glyphicon-chevron-down",
+    57621: "glyphicon-retweet",
+    57622: "glyphicon-shopping-cart",
+    57623: "glyphicon-folder-close",
+    57624: "glyphicon-folder-open",
+    57625: "glyphicon-resize-vertical",
+    //
+    57632: "glyphicon-resize-horizontal",
+    57633: "glyphicon-hdd",
+    57634: "glyphicon-bullhorn",
+    57635: "glyphicon-bell",
+    57636: "glyphicon-certificate",
+    57637: "glyphicon-thumbs-up",
+    57638: "glyphicon-thumbs-down",
+    57639: "glyphicon-hand-right",
+    57640: "glyphicon-hand-left",
+    57641: "glyphicon-hand-up",
+    //
+    57648: "glyphicon-hand-down",
+    57649: "glyphicon-circle-arrow-right",
+    57650: "glyphicon-circle-arrow-left",
+    57651: "glyphicon-circle-arrow-up",
+    57652: "glyphicon-circle-arrow-down",
+    57653: "glyphicon-globe",
+    57654: "glyphicon-wrench",
+    57655: "glyphicon-tasks",
+    57656: "glyphicon-filter",
+    57657: "glyphicon-briefcase",
+    //
+    57664: "glyphicon-fullscreen",
+    57665: "glyphicon-dashboard",
+    57666: "glyphicon-paperclip",
+    57667: "glyphicon-heart-empty",
+    57668: "glyphicon-link",
+    57669: "glyphicon-phone",
+    57670: "glyphicon-pushpin",
+    //
+    57672: "glyphicon-usd",
+    57673: "glyphicon-gbp",
+    //
+    57680: "glyphicon-sort",
+    57681: "glyphicon-sort-by-alphabet",
+    57682: "glyphicon-sort-by-alphabet-alt",
+    57683: "glyphicon-sort-by-order",
+    57684: "glyphicon-sort-by-order-alt",
+    57685: "glyphicon-sort-by-attributes",
+    57686: "glyphicon-sort-by-attributes-alt",
+    57687: "glyphicon-unchecked",
+    57688: "glyphicon-expand",
+    57689: "glyphicon-collapse-down",
+    //
+    57696: "glyphicon-collapse-up",
+    57697: "glyphicon-log-in",
+    57698: "glyphicon-flash",
+    57699: "glyphicon-log-out",
+    57700: "glyphicon-new-window",
+    57701: "glyphicon-record",
+    57702: "glyphicon-save",
+    57703: "glyphicon-open",
+    57704: "glyphicon-saved",
+    57705: "glyphicon-import",
+    //
+    57712: "glyphicon-export",
+    57713: "glyphicon-send",
+    57714: "glyphicon-floppy-disk",
+    57715: "glyphicon-floppy-saved",
+    57716: "glyphicon-floppy-remove",
+    57717: "glyphicon-floppy-save",
+    57718: "glyphicon-floppy-open",
+    57719: "glyphicon-credit-card",
+    57720: "glyphicon-transfer",
+    57721: "glyphicon-cutlery",
+    //
+    57728: "glyphicon-header",
+    57729: "glyphicon-compressed",
+    57730: "glyphicon-earphone",
+    57731: "glyphicon-phone-alt",
+    57732: "glyphicon-tower",
+    57733: "glyphicon-stats",
+    57734: "glyphicon-sd-video",
+    57735: "glyphicon-hd-video",
+    57736: "glyphicon-subtitles",
+    57737: "glyphicon-sound-stereo",
+    //
+    57744: "glyphicon-sound-dolby",
+    57745: "glyphicon-sound-5-1",
+    57746: "glyphicon-sound-6-1",
+    57747: "glyphicon-sound-7-1",
+    57748: "glyphicon-copyright-mark",
+    57749: "glyphicon-registration-mark",
+    //
+    57751: "glyphicon-cloud-download",
+    57752: "glyphicon-cloud-upload",
+    57753: "glyphicon-tree-conifer",
+    //
+    57856: "glyphicon-tree-deciduous",
+    57857: "glyphicon-cd",
+    57858: "glyphicon-save-file",
+    57859: "glyphicon-open-file",
+    57860: "glyphicon-level-up",
+    57861: "glyphicon-copy",
+    57862: "glyphicon-paste",
+    //
+    57865: "glyphicon-alert",
+    //
+    57872: "glyphicon-equalizer",
+    57873: "glyphicon-king",
+    57874: "glyphicon-queen",
+    57875: "glyphicon-pawn",
+    57876: "glyphicon-bishop",
+    57877: "glyphicon-knight",
+    57878: "glyphicon-baby-formula",
+    57880: "glyphicon-blackboard",
+    57881: "glyphicon-bed",
+    //
+    57889: "glyphicon-erase",
+    //
+    57891: "glyphicon-lamp", //
+    57892: "glyphicon-duplicate",
+    57893: "glyphicon-piggy-bank",
+    57894: "glyphicon-scissors",
+    57895: "glyphicon-bitcoin",
+    //
+    57904: "glyphicon-scale",
+    57905: "glyphicon-ice-lolly",
+    57906: "glyphicon-ice-lolly-tasted",
+    57907: "glyphicon-education",
+    57908: "glyphicon-open-horizontal",
+    57909: "glyphicon-open vertical",
+    57910: "glyphicon-menu-hamburger",
+    57911: "glyphicon-modal-window",
+    57912: "glyphicon-oil",
+    57913: "glyphicon-grain",
+    //
+    57920: "glyphicon-sunglasses",
+    57921: "glyphicon-text-size",
+    57922: "glyphicon-text-color",
+    57923: "glyphicon-text-background",
+    57924: "glyphicon-object-align-top",
+    57925: "glyphicon-object-align-bottom",
+    57926: "glyphicon-object-align-horizontal",
+    57927: "glyphicon-object-align-left",
+    57928: "glyphicon-object-align-vertical",
+    57929: "glyphicon-object-align-right",
+    //
+    57936: "glyphicon-triangle-right",
+    57937: "glyphicon-triangle-left",
+    57938: "glyphicon-triangle-bottom",
+    57939: "glyphicon-triangle-top",
+    57940: "glyphicon-console",
+    57941: "glyphicon-superscript",
+    57942: "glyphicon-subscript",
+    57943: "glyphicon-menu-left",
+    57944: "glyphicon-menu-right",
+    57945: "glyphicon-menu-down",
+    //
+    57952: "glyphicon-menu-up"
 };
 
 // CSV helpers
@@ -363,34 +394,30 @@ async function getPageFromAction(action) {
     return "";
 }
 
-// Extract icon
-function getIcon(item) {
+async function getIcon(item) {
     if (!item || !item.icon) return "";
 
-    const icon = item.icon;
+    let icon = item.icon;
 
     try {
-        // For GlyphIcon - use the code property
-        if (icon.constructor.name === "GlyphIcon" && icon.code) {
-            return `glyphicon-${icon.code}`;
+        if (!icon.isLoaded) await icon.load();
+        const data = icon.toJSON();
+        const code = data.code; // Dit haalt 42, 8364, of 57377 op
+
+        if (icon.constructor.name === "GlyphIcon") {
+            // Gebruik de nieuwe, accurate mappingstabel
+            return glyphiconMapping[code] || `glyphicon-unknown-code-${code}`;
         }
 
-        // For IconCollectionIcon (Atlas icons)
         if (icon.constructor.name === "IconCollectionIcon") {
-            if (icon.image && icon.image.name) {
-                return `Image: ${icon.image.name}`;
-            }
-            if (icon.imageQualifiedName) {
-                const parts = icon.imageQualifiedName.split('.');
-                return `Image: ${parts[parts.length - 1]}`;
-            }
+            const imgPath = data.image || "";
+            return imgPath ? `icon-${imgPath.split('.').pop()}` : "IconCollection";
         }
 
     } catch (e) {
-        console.warn(`Error extracting icon: ${e.message}`);
+        return "Error";
     }
-
-    return icon.constructor.name;
+    return "";
 }
 
 // Extract caption
@@ -417,12 +444,22 @@ async function extractMenuItems(items, profileType, documentName, parentPath, na
 
             // Extract page from action
             let targetPage = "";
+            let iconValue = "";
+
+            // 1. Haal de doelpagina op uit de actie (bestaande logica)
             if (item.action) {
                 targetPage = await getPageFromAction(item.action);
             }
 
-            // Extract icon
-            const icon = getIcon(item);
+            // 2. Haal de icoon-waarde op (voor afbeeldingen)
+            if (item.icon) {
+                if (item.icon.structureTypeName === "Pages$ImageIcon") {
+                    // Soms is de property direct beschikbaar via de referentie-naam
+                    iconValue = item.icon.imageQualifiedName || (item.icon.image ? item.icon.image.qualifiedName : "");
+                } else {
+                    iconValue = await getIcon(item);
+                }
+            }
 
             navigationItems.push({
                 documentName,
@@ -432,7 +469,7 @@ async function extractMenuItems(items, profileType, documentName, parentPath, na
                 caption,
                 path: currentPath,
                 targetPage,
-                icon,
+                iconValue,
                 alternativeText: item.alternativeText || ""
             });
 
@@ -478,7 +515,7 @@ async function extractProfile(profile, profileType, documentName, navigationItem
                 caption: "Home Page",
                 path: "",
                 targetPage: homePage,
-                icon: "",
+                iconValue: "",
                 alternativeText: ""
             });
         }
@@ -510,7 +547,7 @@ async function extractProfile(profile, profileType, documentName, navigationItem
                     caption: `Role: ${roleName}`,
                     path: "",
                     targetPage: rolePage,
-                    icon: "",
+                    iconValue: "",
                     alternativeText: ""
                 });
             }
@@ -584,7 +621,7 @@ async function main() {
         for (const item of navigationItems) {
             rows.push([
                 item.documentName, item.profileType, item.itemType, item.level,
-                item.caption, item.path, item.targetPage, item.icon, item.alternativeText
+                item.caption, item.path, item.targetPage, item.iconValue, item.alternativeText
             ]);
         }
 
@@ -598,7 +635,7 @@ async function main() {
         console.log("=".repeat(50));
         console.log(`Total items: ${navigationItems.length}`);
         console.log(`With pages/actions: ${navigationItems.filter(i => i.targetPage).length}`);
-        console.log(`With icons: ${navigationItems.filter(i => i.icon && !i.icon.includes('Icon')).length}`);
+        console.log(`With icons: ${navigationItems.filter(i => i.iconValue && !i.iconValue.includes('Icon')).length}`);
 
         console.log("\n✓ Export completed successfully!\n");
 
