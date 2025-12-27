@@ -1,11 +1,18 @@
-# Mendix Navigation Extractor
+# Mendix Navigation Extractor - Version 1.2.1
+
 
 This tool extracts all navigation items from a Mendix project using the Mendix Platform SDK and Model SDK, then exports them to a CSV file.
+
+## 🚀 What's New in v1.2.1?
+
+### ✨ Microflow Security Support!
+The script now automatically detects and retrieves user roles for pages, microflows, and nanoflows!
 
 ## Features
 
 - Extracts navigation from all profiles (Desktop, Tablet, Phone)
 - Captures menu items, sub-menus, and nested navigation structures
+- Menu items have role information reported
 - Exports home pages and role-based home pages
 - Includes icon information and alternative text
 - Preserves navigation hierarchy with level indicators
@@ -45,7 +52,7 @@ npm install mendixplatformsdk mendixmodelsdk
 3. Generate a Personal Access Token (PAT)
 4. Note your project ID (found in the project settings)
 
-## Configuration
+## ⚙️ Configuration
 
 You can configure the script in two ways:
 
@@ -66,16 +73,16 @@ Open `extract-navigation.js` and modify the CONFIG object:
 const CONFIG = {
     projectId: process.env.MENDIX_PROJECT_ID || "your-project-id",
     branch: process.env.MENDIX_BRANCH || "main",
-    outputFile: process.env.OUTPUT_FILE || "navigation-items.csv"
+    outputFile: process.env.OUTPUT_FILE || "navigation-items.csv",
+    debug: process.env.DEBUG === "true" || false  // ← NEW!
 };
 ```
 
-## Usage
+## 🔧 Usage
 
-Run the script:
-
+### Standard Usage
 ```bash
-node extract-mendix-navigation.js
+node extract-navigation.js
 ```
 
 The script will:
@@ -83,6 +90,20 @@ The script will:
 2. Open your project's working copy
 3. Extract all navigation items
 4. Generate a CSV file with the results
+
+### With Debug Mode (recommended for troubleshooting)
+```bash
+DEBUG=true node extract-navigation.js
+```
+
+Debug mode shows:
+- Which menu items are being processed
+- Whether it's a page, microflow, or nanoflow
+- Which module roles are found
+- Which user roles are mapped
+- Why some items don't have roles
+
+---
 
 ## Output Format
 
@@ -99,17 +120,78 @@ The generated CSV file contains the following columns:
 | Target Page | Page or MF or NF that opens when clicked |
 | Icon | Icon identifier |
 | Alternative Text | Alt text for the menu item |
+| Allowed User Roles | Allowed User Roles |
 
-## Example Output
 
-```csv
-Document Name,Profile Type,Item Type,Level,Caption,Path,Target Page,Icon,Alternative Text
-Navigation,Desktop,HomePage,,"Home Page",,MyModule.HomePage,,
-Navigation,Desktop,MenuItem,0,Home,Home,MyModule.HomePage,glyphicon-home,
-Navigation,Desktop,MenuItem,0,Settings,Settings,,,
-Navigation,Desktop,MenuItem,1,Users,Settings > Users,MyModule.UserManagement,,
-Navigation,Desktop,MenuItem,1,Roles,Settings > Roles,MyModule.RoleManagement,,
+## 📊 Example Output
+
+### Menu Item to a Page:
 ```
+Menu item: Dashboard
+  Target: Dashboard_Overview
+  → Checking page: Dashboard_Overview
+    Module roles found: Administrator, User
+    User roles mapped: Administrator, User
+```
+
+### Menu Item to a Microflow:
+```
+Menu item: Export Data
+  Target: [MF: ExportToExcel]
+  → Checking microflow: ExportToExcel
+    Module roles found: Administrator
+    User roles mapped: Administrator
+```
+
+### Menu Item to a Nanoflow (that opens a page):
+```
+Menu item: Customer Details
+  Target: [NF: ValidateAndShow]
+  → Checking nanoflow: ValidateAndShow
+    Nanoflow opens page: CustomerDetails
+    Module roles found: Sales.User, Sales.Admin
+    User roles mapped: SalesUser, Administrator
+```
+
+### Menu Item to a Nanoflow (pure client-side):
+```
+Menu item: Calculate Total
+  Target: [NF: CalculatePrice]
+  → Checking nanoflow: CalculatePrice
+    Nanoflow doesn't open a page (client-side logic only)
+```
+
+### Menu Item without Target:
+```
+Menu item: Submenu Header
+  ⚠️ No target page/action found
+```
+
+## 📈 Statistics
+
+The summary now shows detailed statistics:
+
+```
+==================================================
+SUMMARY
+==================================================
+Total items: 45
+With pages/actions: 38
+With icons: 35
+With user role restrictions: 32
+```
+
+**Interpretation:**
+- **45 items total** - All menu items including headers
+- **38 with pages/actions** - Items that lead somewhere (page/microflow)
+- **35 with icons** - Items with an icon
+- **32 with user role restrictions** - Items with specific security
+
+If `With user role restrictions` is much lower than `With pages/actions`:
+- Many items might have `Allow all roles`
+- Use DEBUG mode to investigate
+
+---
 
 ## Troubleshooting
 

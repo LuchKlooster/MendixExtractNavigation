@@ -2,9 +2,9 @@
  *       
  *      ███  ███  ███
  *      ███▄▄███▄▄███
- *       ███████████     Mendix SDK Navigation Extractor - Ver. 1.0.0
- *       ████▀▀▀████     Extracts pages from actions and icons from code property
- *       ████   ████     Usage: node extract-navigation.js
+ *       ███████████     Mendix SDK Navigation Extractor - Ver. 1.2.1
+ *       ████▀▀▀████     Extracts pages, icons, and user role permissions
+ *       ████   ████     Now with nanoflow → page detection!
  *     ███████████████ 
  *     CONVENT SYSTEMS
  *
@@ -14,9 +14,10 @@ const { MendixPlatformClient } = require("mendixplatformsdk");
 const fs = require("fs");
 
 const CONFIG = {
-    projectId: process.env.MENDIX_PROJECT_ID || "91a6401a-1126-49d5-a295-9ee637b88554",
+    projectId: process.env.MENDIX_PROJECT_ID || "542db4de-9b24-48cf-93d5-1ce757594249",
     branch: process.env.MENDIX_BRANCH || "main",
-    outputFile: process.env.OUTPUT_FILE || "navigation-items.csv"
+    outputFile: process.env.OUTPUT_FILE || "navigation-items.csv",
+    debug: process.env.DEBUG === "true" || false
 };
 const glyphiconMapping = {
     // Speciale tekens (ASCII gebaseerd)
@@ -433,8 +434,251 @@ function getCaption(item) {
     return "No Caption";
 }
 
+// Get allowed roles for a page
+async function getAllowedRolesForPage(pageName, model) {
+    if (!pageName) return [];
+    
+    try {
+        // Find the page in the model
+        const pages = model.allPages();
+        const page = pages.find(p => p && (p.name === pageName || p.qualifiedName?.endsWith(`.${pageName}`)));
+        
+        if (!page) {
+            return [];
+        }
+        
+        // Load the page if needed
+        if (typeof page.load === 'function' && !page.isLoaded) {
+            await page.load();
+        }
+        
+        // Get allowed roles (module roles)
+        const allowedRoles = page.allowedRoles || [];
+        const roleNames = allowedRoles
+            .filter(role => role != null)  // Filter out null roles
+            .map(role => {
+                if (role.name) return role.name;
+                if (role.qualifiedName) {
+                    const parts = role.qualifiedName.split('.');
+                    return parts[parts.length - 1];
+                }
+                return null;
+            })
+            .filter(Boolean);
+        
+        return roleNames;
+    } catch (error) {
+        console.warn(`Could not get roles for page ${pageName}: ${error.message}`);
+        return [];
+    }
+}
+
+// Get allowed roles for a microflow
+async function getAllowedRolesForMicroflow(microflowName, model) {
+    if (!microflowName) return [];
+    
+    try {
+        // Find the microflow in the model
+        const microflows = model.allMicroflows();
+        const microflow = microflows.find(mf => mf && (mf.name === microflowName || mf.qualifiedName?.endsWith(`.${microflowName}`)));
+        
+        if (!microflow) {
+            return [];
+        }
+        
+        // Load the microflow if needed
+        if (typeof microflow.load === 'function' && !microflow.isLoaded) {
+            await microflow.load();
+        }
+        
+        // Get allowed module roles
+        const allowedModuleRoles = microflow.allowedModuleRoles || [];
+        const roleNames = allowedModuleRoles
+            .filter(role => role != null)
+            .map(role => {
+                if (role.name) return role.name;
+                if (role.qualifiedName) {
+                    const parts = role.qualifiedName.split('.');
+                    return parts[parts.length - 1];
+                }
+                return null;
+            })
+            .filter(Boolean);
+        
+        return roleNames;
+    } catch (error) {
+        console.warn(`Could not get roles for microflow ${microflowName}: ${error.message}`);
+        return [];
+    }
+}
+
+// Get page from nanoflow (nanoflows can open pages)
+async function getPageFromNanoflow(nanoflowName, model) {
+    if (!nanoflowName) return null;
+    
+    try {
+        // Find the nanoflow in the model
+        const nanoflows = model.allNanoflows();
+        const nanoflow = nanoflows.find(nf => nf && (nf.name === nanoflowName || nf.qualifiedName?.endsWith(`.${nanoflowName}`)));
+        
+        if (!nanoflow) {
+            return null;
+        }
+        
+        // Load the nanoflow if needed
+        if (typeof nanoflow.load === 'function' && !nanoflow.isLoaded) {
+            await nanoflow.load();
+        }
+        
+        // Look through nanoflow actions to find ShowPage actions
+        if (nanoflow.objectCollection && nanoflow.objectCollection.objects) {
+            for (const obj of nanoflow.objectCollection.objects) {
+                // Check if it's an ActionActivity with a ShowPageAction
+                if (obj.constructor.name === 'ActionActivity' && obj.action) {
+                    const action = obj.action;
+                    
+                    // Load action if needed
+                    if (typeof action.load === 'function' && !action.isLoaded) {
+                        await action.load();
+                    }
+                    
+                    if (action.constructor.name === 'ShowPageAction') {
+                        if (action.pageSettings) {
+                            if (typeof action.pageSettings.load === 'function') {
+                                await action.pageSettings.load();
+                            }
+                            
+                            if (action.pageSettings.page) {
+                                const page = action.pageSettings.page;
+                                return page.name || page.qualifiedName || null;
+                            }
+                            if (action.pageSettings.pageQualifiedName) {
+                                const parts = action.pageSettings.pageQualifiedName.split('.');
+                                return parts[parts.length - 1];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        return null;
+    } catch (error) {
+        console.warn(`Could not get page from nanoflow ${nanoflowName}: ${error.message}`);
+        return null;
+    }
+}
+
+// Get allowed roles for a target (automatically detects if page or microflow)
+async function getAllowedRolesForTarget(target, model, debugLog = false) {
+    if (!target || !model) return [];
+    
+    try {
+        // Check if it's a microflow (marked with [MF: name])
+        if (target.startsWith('[MF:')) {
+            const microflowName = target.replace(/^\[MF:\s*/, '').replace(/\]$/, '').trim();
+            if (debugLog) console.log(`  → Checking microflow: ${microflowName}`);
+            const moduleRoles = await getAllowedRolesForMicroflow(microflowName, model);
+            if (debugLog) console.log(`    Module roles found: ${moduleRoles.join(', ') || 'none'}`);
+            const userRoles = await mapModuleRolesToUserRoles(moduleRoles, model);
+            if (debugLog) console.log(`    User roles mapped: ${userRoles.join(', ') || 'none'}`);
+            return userRoles;
+        }
+        
+        // Check if it's a nanoflow (marked with [NF: name])
+        if (target.startsWith('[NF:')) {
+            const nanoflowName = target.replace(/^\[NF:\s*/, '').replace(/\]$/, '').trim();
+            if (debugLog) console.log(`  → Checking nanoflow: ${nanoflowName}`);
+            
+            // Try to find a page that the nanoflow opens
+            const pageName = await getPageFromNanoflow(nanoflowName, model);
+            
+            if (pageName) {
+                if (debugLog) console.log(`    Nanoflow opens page: ${pageName}`);
+                const moduleRoles = await getAllowedRolesForPage(pageName, model);
+                if (debugLog) console.log(`    Module roles found: ${moduleRoles.join(', ') || 'none'}`);
+                const userRoles = await mapModuleRolesToUserRoles(moduleRoles, model);
+                if (debugLog) console.log(`    User roles mapped: ${userRoles.join(', ') || 'none'}`);
+                return userRoles;
+            } else {
+                if (debugLog) console.log(`    Nanoflow doesn't open a page (client-side logic only)`);
+                return []; // Nanoflow doesn't open a page
+            }
+        }
+        
+        // Otherwise, treat as page
+        if (debugLog) console.log(`  → Checking page: ${target}`);
+        const moduleRoles = await getAllowedRolesForPage(target, model);
+        if (debugLog) console.log(`    Module roles found: ${moduleRoles.join(', ') || 'none'}`);
+        const userRoles = await mapModuleRolesToUserRoles(moduleRoles, model);
+        if (debugLog) console.log(`    User roles mapped: ${userRoles.join(', ') || 'none'}`);
+        return userRoles;
+        
+    } catch (error) {
+        console.warn(`Could not get roles for target ${target}: ${error.message}`);
+        return [];
+    }
+}
+
+// Map module roles to user roles
+async function mapModuleRolesToUserRoles(moduleRoles, model) {
+    try {
+        // Check if moduleRoles is valid
+        if (!moduleRoles || !Array.isArray(moduleRoles) || moduleRoles.length === 0) {
+            return [];
+        }
+        
+        // Get project security
+        const securityDocs = model.allProjectSecurities();
+        if (securityDocs.length === 0) {
+            return [];
+        }
+        
+        const projectSecurity = securityDocs[0];
+        if (typeof projectSecurity.load === 'function' && !projectSecurity.isLoaded) {
+            await projectSecurity.load();
+        }
+        
+        const userRoles = projectSecurity.userRoles || [];
+        const matchingUserRoles = [];
+        
+        // For each user role, check if it has the required module roles
+        for (const userRole of userRoles) {
+            // Skip if userRole is null or doesn't have a name
+            if (!userRole || !userRole.name) {
+                continue;
+            }
+            
+            const userRoleModuleRoles = userRole.moduleRoles || [];
+            const userRoleModuleRoleNames = userRoleModuleRoles
+                .filter(mr => mr != null)  // Filter out null module roles
+                .map(mr => {
+                    if (mr.name) return mr.name;
+                    if (mr.qualifiedName) {
+                        const parts = mr.qualifiedName.split('.');
+                        return parts[parts.length - 1];
+                    }
+                    return null;
+                })
+                .filter(Boolean);
+            
+            // Check if this user role has any of the required module roles
+            const hasAccess = moduleRoles.some(mr => userRoleModuleRoleNames.includes(mr));
+            
+            if (hasAccess) {
+                matchingUserRoles.push(userRole.name);
+            }
+        }
+        
+        return matchingUserRoles;
+    } catch (error) {
+        console.warn(`Error mapping module roles to user roles: ${error.message}`);
+        return [];
+    }
+}
+
 // Extract menu items recursively
-async function extractMenuItems(items, profileType, documentName, parentPath, navigationItems, level = 0) {
+async function extractMenuItems(items, profileType, documentName, parentPath, navigationItems, model, level = 0) {
     if (!items || items.length === 0) return;
 
     for (const item of items) {
@@ -445,13 +689,29 @@ async function extractMenuItems(items, profileType, documentName, parentPath, na
             // Extract page from action
             let targetPage = "";
             let iconValue = "";
+            let allowedUserRoles = [];
 
             // 1. Haal de doelpagina op uit de actie (bestaande logica)
             if (item.action) {
                 targetPage = await getPageFromAction(item.action);
             }
 
-            // 2. Haal de icoon-waarde op (voor afbeeldingen)
+            // 2. Haal de allowed roles op voor het target (page, microflow, etc.)
+            if (targetPage && model) {
+                if (CONFIG.debug) {
+                    console.log(`\nMenu item: ${caption}`);
+                    console.log(`  Target: ${targetPage}`);
+                }
+                allowedUserRoles = await getAllowedRolesForTarget(targetPage, model, CONFIG.debug);
+                if (CONFIG.debug && (!allowedUserRoles || allowedUserRoles.length === 0)) {
+                    console.log(`  ⚠️ No user roles found for this target`);
+                }
+            } else if (CONFIG.debug && !targetPage) {
+                console.log(`\nMenu item: ${caption}`);
+                console.log(`  ⚠️ No target page/action found`);
+            }
+
+            // 3. Haal de icoon-waarde op (voor afbeeldingen)
             if (item.icon) {
                 if (item.icon.structureTypeName === "Pages$ImageIcon") {
                     // Soms is de property direct beschikbaar via de referentie-naam
@@ -470,12 +730,13 @@ async function extractMenuItems(items, profileType, documentName, parentPath, na
                 path: currentPath,
                 targetPage,
                 iconValue,
-                alternativeText: item.alternativeText || ""
+                alternativeText: item.alternativeText || "",
+                allowedUserRoles: (Array.isArray(allowedUserRoles) && allowedUserRoles.length > 0) ? allowedUserRoles.join('; ') : ""
             });
 
             // Recurse into sub-items
             if (item.items && item.items.length > 0) {
-                await extractMenuItems(item.items, profileType, documentName, currentPath, navigationItems, level + 1);
+                await extractMenuItems(item.items, profileType, documentName, currentPath, navigationItems, model, level + 1);
             }
         } catch (error) {
             console.warn(`Warning processing menu item: ${error.message}`);
@@ -484,15 +745,16 @@ async function extractMenuItems(items, profileType, documentName, parentPath, na
 }
 
 // Extract profile
-async function extractProfile(profile, profileType, documentName, navigationItems) {
+async function extractProfile(profile, profileType, documentName, navigationItems, model) {
     try {
         if (profile.menuItemCollection?.items) {
-            await extractMenuItems(profile.menuItemCollection.items, profileType, documentName, "", navigationItems);
+            await extractMenuItems(profile.menuItemCollection.items, profileType, documentName, "", navigationItems, model);
         }
 
         if (profile.homePage) {
             // Extract home page
             let homePage = "";
+            let allowedUserRoles = [];
 
             // Load if needed
             if (typeof profile.homePage.load === 'function') {
@@ -507,6 +769,11 @@ async function extractProfile(profile, profileType, documentName, navigationItem
                 homePage = parts[parts.length - 1];
             }
 
+            // Get allowed roles for home page
+            if (homePage && model) {
+                allowedUserRoles = await getAllowedRolesForTarget(homePage, model);
+            }
+
             navigationItems.push({
                 documentName,
                 profileType,
@@ -516,7 +783,8 @@ async function extractProfile(profile, profileType, documentName, navigationItem
                 path: "",
                 targetPage: homePage,
                 iconValue: "",
-                alternativeText: ""
+                alternativeText: "",
+                allowedUserRoles: (Array.isArray(allowedUserRoles) && allowedUserRoles.length > 0) ? allowedUserRoles.join('; ') : ""
             });
         }
 
@@ -529,6 +797,8 @@ async function extractProfile(profile, profileType, documentName, navigationItem
                 }
 
                 let rolePage = "";
+                let allowedUserRoles = [];
+                
                 if (rbh.page) {
                     const page = rbh.page;
                     rolePage = page.name || page.qualifiedName || "";
@@ -538,6 +808,11 @@ async function extractProfile(profile, profileType, documentName, navigationItem
                 }
 
                 const roleName = rbh.userRole?.name || rbh.userRole?.qualifiedName || "Unknown";
+                
+                // Get allowed roles for role-based home page
+                if (rolePage && model) {
+                    allowedUserRoles = await getAllowedRolesForTarget(rolePage, model);
+                }
 
                 navigationItems.push({
                     documentName,
@@ -548,7 +823,8 @@ async function extractProfile(profile, profileType, documentName, navigationItem
                     path: "",
                     targetPage: rolePage,
                     iconValue: "",
-                    alternativeText: ""
+                    alternativeText: "",
+                    allowedUserRoles: (Array.isArray(allowedUserRoles) && allowedUserRoles.length > 0) ? allowedUserRoles.join('; ') : ""
                 });
             }
         }
@@ -562,10 +838,10 @@ async function main() {
     console.log("╔═════════════════════════════════════════════════════════════════════════════╗");
     console.log("║ ███  ███  ███                                                               ║");
     console.log("║ ███▄▄███▄▄███                                                               ║");
-    console.log("║  ███████████     Mendix SDK Navigation Extractor - Ver. 1.0.0               ║");
-    console.log("║  ████▀▀▀████                                                                ║");
+    console.log("║  ███████████     Mendix SDK Navigation Extractor - Ver. 1.2.1               ║");
+    console.log("║  ████▀▀▀████     Pages, icons, user roles (pages/microflows/nanoflows!)     ║");
     console.log("║  ████   ████     Usage: node extract-navigation.js                          ║");
-    console.log("║███████████████                                                              ║");
+    console.log("║███████████████   Debug: DEBUG=true node extract-navigation.js               ║");
     console.log("║CONVENT SYSTEMS                                                              ║");
     console.log("╚═════════════════════════════════════════════════════════════════════════════╝\n");
 
@@ -576,7 +852,12 @@ async function main() {
         }
 
         console.log(`Project: ${CONFIG.projectId}`);
-        console.log(`Branch: ${CONFIG.branch}\n`);
+        console.log(`Branch: ${CONFIG.branch}`);
+        if (CONFIG.debug) {
+            console.log(`🐛 DEBUG MODE ENABLED - Detailed logging active\n`);
+        } else {
+            console.log();
+        }
 
         console.log("1. Initializing client...");
         const client = new MendixPlatformClient();
@@ -604,7 +885,7 @@ async function main() {
                 for (const profile of navDoc.profiles) {
                     const profileType = profile.profileKind || profile.kind || profile.name || "Unknown";
                     console.log(`   Extracting ${profileType} profile...`);
-                    await extractProfile(profile, profileType, docName, navigationItems);
+                    await extractProfile(profile, profileType, docName, navigationItems, model);
                 }
             }
         }
@@ -615,13 +896,13 @@ async function main() {
         console.log("6. Generating CSV...");
         const rows = [[
             "Document Name", "Profile Type", "Item Type", "Level",
-            "Caption", "Path", "Target Page", "Icon", "Alternative Text"
+            "Caption", "Path", "Target Page", "Icon", "Alternative Text", "Allowed User Roles"
         ]];
 
         for (const item of navigationItems) {
             rows.push([
                 item.documentName, item.profileType, item.itemType, item.level,
-                item.caption, item.path, item.targetPage, item.iconValue, item.alternativeText
+                item.caption, item.path, item.targetPage, item.iconValue, item.alternativeText, item.allowedUserRoles || ""
             ]);
         }
 
@@ -636,6 +917,7 @@ async function main() {
         console.log(`Total items: ${navigationItems.length}`);
         console.log(`With pages/actions: ${navigationItems.filter(i => i.targetPage).length}`);
         console.log(`With icons: ${navigationItems.filter(i => i.iconValue && !i.iconValue.includes('Icon')).length}`);
+        console.log(`With user role restrictions: ${navigationItems.filter(i => i.allowedUserRoles && i.allowedUserRoles.length > 0).length}`);
 
         console.log("\n✓ Export completed successfully!\n");
 
