@@ -5,7 +5,7 @@ This tool extracts all navigation items from a Mendix project using the Mendix P
 
 ## 🚀 What's New in v1.2.1?
 
-### ✨ Microflow Security Support!
+### ✨ User Roles!
 The script now automatically detects and retrieves user roles for pages, microflows, and nanoflows!
 
 ## Features
