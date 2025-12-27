@@ -279,12 +279,42 @@ Recursively extracts menu items and sub-menus.
 
 This is a utility script provided as-is for working with Mendix projects.
 
-## Support
+## 📞 Support
 
-For issues related to:
-- **Mendix SDK**: Check Mendix documentation or community forums
-- **This Script**: Review the troubleshooting section above
+For questions or issues:
+1. First try **DEBUG mode**: `DEBUG=true node extract-navigation.js`
+2. Check console output for warnings
+3. Verify security settings in Mendix Studio Pro
+4. Contact Convent Systems
 
-## Version History
+---
 
-- **1.0.0**: Initial release with support for all navigation profiles
+## 🎉 Changelog
+
+### Version 1.2.1 (Latest)
+- 🐛 **Nanoflow → Page detection** - Nanoflows that open pages now show the correct user roles
+- 📊 **Better coverage** - More menu items now have role information
+- 🔍 **Smart analysis** - Analyzes nanoflow actions to find ShowPage actions
+
+### Version 1.2.0
+- ✨ **Microflow security support** - Now also retrieves roles for microflows
+- ✨ **Auto-detection** - Automatically recognizes pages, microflows, and nanoflows
+- 🐛 **Debug mode** - See exactly what's happening and why
+- 📊 **Better logging** - Clear warnings and error messages
+- 🔧 **More robust code** - Better null checks and error handling
+
+### Version 1.1.1
+- 🐛 Fixed null reference errors
+- 🔧 Better array handling
+
+### Version 1.1.0
+- ✨ Added user roles feature
+- 📊 New CSV column
+
+### Version 1.0.0
+- 🎉 Initial release
+
+---
+
+**Mendix SDK Navigation Extractor v1.2.1**
+© Convent Systems - 2025
