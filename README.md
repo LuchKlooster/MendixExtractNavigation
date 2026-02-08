@@ -34,7 +34,7 @@ The script now automatically detects and retrieves user roles for pages, microfl
   3. Generate a Personal Access Token
   4. Copy the token and set it as the `MENDIX_TOKEN` environment variable
   `
-  ```
+```
 
 ## Installation
 
